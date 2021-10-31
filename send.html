@@ -1,39 +1,107 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<title>Send metrics exampple</title>
+	<title>Test gfy fetch</title>
 	<style type="text/css">
-		.square {
-			width: 100px;
-			height: 100px;
-
-			margin-bottom: 20px;
-
-			background-color: red;
+		body {
+			background-color: #444;
 		}
-
-		.row {
-			margin: 2px;
+		.bg_change {
+			background-color: #465760;
+			transition: background-color 2s;
 		}
-
-		div.black {
-			background-color: black;
+		.container {
+			margin: 0 auto;
+			text-align: center;
+		}
+		h2 {
+			color: #babbbd;
+		}
+		.center {
+			margin: 20px auto;
+		}
+		button {
+			font-size: 1em;
+			color: #babbbd;
+			background-color: #3A454C;
+			width: 150px;
+			height: 60px;
+			border-radius: 4px;
+			border: 1px solid #3A454C;
+			box-shadow: 0px 0px 1px rgba(67, 68, 69, 0.3), 0px 2px 8px rgba(67, 68, 69, 0.3);
+			transition: All 0.8s ease;
+		}
+		button:hover {
+			/*background-color: red;*/
+			box-shadow: 0px 0px 1px rgba(36, 78, 128, 0.3), 0px 2px 8px rgba(42, 122, 203, 0.3);
+		}
+		button:active {
+			background-color: rgba(65, 83, 94, 0.99);
+			transition: none;
+		}
+		.gifs {
+			display: flex;
+			flex-wrap: wrap;
+		}
+		img {
+			margin: 5px;
+			width: 200px;
+			height: 200px;
 		}
 	</style>
 </head>
 <body>
-	<div class="square"></div>
-	<button class="load">Load</button>
-	<div class="results"></div>
+	<div class="container">
+		<h2> Button below will request 10 gifs from gfycats service</h2>
+		<button type="button" class="load center">Load</button>
+		<div class="gifs"></div>
+	</div>
 	<script src="send.js"></script>
 	<script>
-
 		let counter = new Counter();
 
-		counter.init('D8F28E50-3339-11EC-9EDF-9F93090795B1', String(Math.random()).substr(2, 12), 'send test');
+		counter.init('fbd3c6b7-0d88-4826-ae14-d67f9027b1b3', String(Math.random()).substr(2, 12), 'third test');
+		var hasTouchScreen = false;
+		if ("maxTouchPoints" in navigator) {
+			hasTouchScreen = navigator.maxTouchPoints > 0;
+		} else if ("msMaxTouchPoints" in navigator) {
+			hasTouchScreen = navigator.msMaxTouchPoints > 0;
+		} else {
+			var mQ = window.matchMedia && matchMedia("(pointer:coarse)");
+			if (mQ && mQ.media === "(pointer:coarse)") {
+				hasTouchScreen = !!mQ.matches;
+			} else if ('orientation' in window) {
+				hasTouchScreen = true; // deprecated, but good fallback
+			} else {
+				// Only as a last resort, fall back to user agent sniffing
+				var UA = navigator.userAgent;
+				hasTouchScreen = (
+						/\b(BlackBerry|webOS|iPhone|IEMobile)\b/i.test(UA) ||
+						/\b(Android|Windows Phone|iPad|iPod)\b/i.test(UA)
+				);
+			}
+		}
+
+		const getOS = (isTouch) => {
+			if(isTouch) {
+				const ua = navigator.userAgent
+				if (/android/i.test(ua)) {
+					return "Android"
+				}
+				else if (/iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+					return "iOS"
+				}
+				return "Undefined Mobile OS"
+			} else {
+				return navigator.userAgentData.brands[0].brand + ' ' + navigator.userAgentData.brands[0].version;
+			}
+		}
+
 		counter.setAdditionalParams({
 			env: 'production',
-			platform: 'touch'
+			os: navigator.userAgentData.platform,
+			platform: hasTouchScreen ? 'touch' : 'desktop',
+			browser: getOS(hasTouchScreen),
 		});
 
 		counter.send('connect', performance.timing.connectEnd - performance.timing.connectStart);
@@ -42,9 +110,9 @@
 		let timeStart = Date.now();
 
 		setTimeout(function() {
-			document.querySelector('.square').classList.add('black');
+			document.querySelector('body').classList.add('bg_change');
 
-			counter.send('square', Date.now() - timeStart);
+			counter.send('backgroundChanged', Date.now() - timeStart);
 		}, Math.random() * 1000 + 500);
 
 		let uuidv4 = function () {
@@ -53,25 +121,45 @@
 		  	);
 		}
 
-		let drawData = function() {
-			let html = '',
-				count = 500,
-				genStart = Date.now();
+		let cursor = '';
+		const default_url = 'https://api.gfycat.com/v1/gfycats/search?search_text=nature';
 
-			for (let i = 0; i < count; i++) {
-				html += `<div class="row">${uuidv4().toUpperCase()}</div>`
+		async function getGfyData(){
+			let response = await fetch(default_url + cursor).catch(err => console.log("Ошибка HTTP: " + err.status));
+			if (response.ok) {
+				let json = await response.json();
+				console.log(json);
+				cursor = '&cursor=' + json.cursor;
+				let images = [];
+				let gifs = json.gfycats;
+				for(let i = 0; i < gifs.length; i++) {
+					if(gifs[i]?.gif100px) {
+						let img = document.createElement("img");
+						img.src = gifs[i]['gif100px'];
+						images.push(img)
+					}
+				}
+				document.getElementsByClassName("gifs")[0].append(...images);
+				getFetchMetricOfGfycatsService();
+			}
+		}
+		function getFetchMetricOfGfycatsService() {
+			// Check for support of the PerformanceResourceTiming
+			if (performance === undefined) {
+				console.log("PerformanceResourceTiming NOT supported");
+				return;
 			}
 
-			counter.send('generate', Date.now() - genStart);
-
-			let drawStart = Date.now();
-
-			document.querySelector('.results').innerHTML = html;
-
-			requestAnimationFrame(function() {
-				counter.send('draw', Date.now() - drawStart);
-			});
-		};
+			let resources  = performance.getEntriesByType("resource");
+			for (let i=0; i < resources.length; i++) {
+				if(resources[i].initiatorType === 'fetch' && resources[i].fetchStart > 0) {
+					counter.send('fetchGifs', resources[i].responseEnd - resources[i].fetchStart);
+				}
+				if(resources[i].initiatorType === 'img' && resources[i].duration > 0) {
+					counter.send('img', resources[i].duration);
+				}
+			}
+		}
 
 		document.querySelector('.load').onclick = function() {
 			let timeStart = Date.now();
@@ -79,7 +167,7 @@
 			setTimeout(function() {
 				counter.send('load', Date.now() - timeStart);
 
-				drawData();
+				getGfyData();
 			}, Math.random() * 1000 + 2000);
 		}
 	</script>
